@@ -20,6 +20,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::resource('family', FamilyController::class);
     Route::post('family/{id}/uploadPhoto', [FamilyController::class, 'upload']);
 
+    Route::get('chores/active', [ChoreController::class, 'active']);
     Route::resource('chores', ChoreController::class);
     Route::patch('chores/{id}/toggle', [ChoreController::class, 'toggle']);
     Route::post('chores/{id}/complete', [ChoreController::class, 'complete']);
