@@ -2,7 +2,7 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\{ApiController, AuthController, FamilyController, ChoreController, CategoryController};
+use App\Http\Controllers\{AuthController, FamilyController, ChoreController, CategoryController};
 
 Route::middleware('guest')->group(function () {
     Route::post('register', [AuthController::class, 'register']);

@@ -22,7 +22,7 @@ return new class extends Migration
             $table->unsignedTinyInteger('weight')->nullable();
             $table->unsignedTinyInteger('priority')->nullable();
             $table->unsignedTinyInteger('is_active')->nullable();
-            $table->date('starts_on')->nullable();
+            $table->timestamp('due_at')->nullable();
             $table->timestamps();
         });
     }
