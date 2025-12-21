@@ -89,7 +89,7 @@ class ChoreController extends Controller
                 'id' => $chore->id,
                 'title' => $chore->title,
                 'frequency' => $chore->frequency,
-                'category' => $chore->category,
+                'category_id' => $chore->category_id,
                 'weight' => $chore->weight,
                 'priority' => $chore->priority,
                 'is_active' => (bool) $chore->is_active,
@@ -174,12 +174,13 @@ class ChoreController extends Controller
 
     public function store(Request $request)
     {
+        $user = $request->user();
         $family = $this->currentFamilyOrFail($request);
 
         $data = $request->validate([
             'title' => ['required', 'string', 'max:120'],
             'frequency' => ['required', 'in:daily,weekly,monthly,semiannual'],
-            'category' => ['required', 'string', 'max:60'],
+            'category_id' => ['required'],
             'weight' => ['required', 'integer', 'min:1', 'max:5'],
             'priority' => ['required', 'integer', 'min:1', 'max:5'],
             'is_active' => ['required', 'boolean'],
@@ -191,15 +192,15 @@ class ChoreController extends Controller
         $completedCurrent = (bool)($data['completed_current_period'] ?? false);
         unset($data['completed_current_period']);
 
-        return DB::transaction(function () use ($request, $family, $data, $completedCurrent) {
-            /** @var \App\Models\User $user */
+        return DB::transaction(function () use ($request, $user, $family, $data, $completedCurrent) {
             $user = $request->user();
 
             $chore = Chore::create([
                 'family_id' => $family->id,
+                'assigned_to_user_id' => $user->id,
+                'category_id' => $data['category_id'],
                 'title' => $data['title'],
                 'frequency' => $data['frequency'],
-                'category' => $data['category'],
                 'weight' => $data['weight'],
                 'priority' => $data['priority'],
                 'is_active' => $data['is_active'],
@@ -220,6 +221,8 @@ class ChoreController extends Controller
                     ]
                 );
             }
+
+            //$chore->load('category');
 
             return response()->json([
                 'success' => 'ok',
