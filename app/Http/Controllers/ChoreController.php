@@ -47,11 +47,12 @@ class ChoreController extends Controller
         $family = $this->currentFamilyOrFail($request);
 
         $chores = Chore::query()
+            ->orderByDesc('weight')
+            ->orderBy('title')
             ->where('family_id', $family->id)
             ->where('is_active', true)
             ->orderByDesc('priority')
-            ->orderByDesc('weight')
-            ->orderBy('title')
+            ->with('category')
             ->get();
 
         // Per evitare N query: calcoliamo tutte le period_key e facciamo 1 query completions
@@ -93,6 +94,7 @@ class ChoreController extends Controller
                 'weight' => $chore->weight,
                 'priority' => $chore->priority,
                 'is_active' => (bool) $chore->is_active,
+                'category' => $chore->category,
 
                 // ✅ stato periodo corrente
                 'period_key' => $key,

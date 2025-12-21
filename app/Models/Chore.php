@@ -21,6 +21,6 @@ class Chore extends Model
 
     public function category()
     {
-        return $this->hasOne(Category::class, 'id', 'category_id')->orderBy('created_at', 'desc');
+        return $this->belongsTo(Category::class, 'category_id', 'id')->orderBy('created_at', 'desc');
     }
 }
