@@ -16,9 +16,9 @@ class ChoreController extends Controller
         $family = $this->currentFamilyOrFail($request);
 
         $q = Chore::query()
-            ->where('family_id', $family->id)
             ->orderByDesc('is_active')
-            ->orderBy('title');
+            ->orderBy('title')
+            ->where('family_id', $family->id);
 
         // filtri opzionali
         if ($request->filled('active')) {
@@ -38,7 +38,7 @@ class ChoreController extends Controller
 
         return response()->json([
             'success' => 'ok',
-            'chores' => $q->get(),
+            'chores' => $q->with('category')->get(),
         ]);
     }
 
@@ -47,46 +47,53 @@ class ChoreController extends Controller
         $family = $this->currentFamilyOrFail($request);
 
         $chores = Chore::query()
-            ->orderByDesc('weight')
-            ->orderBy('title')
             ->where('family_id', $family->id)
             ->where('is_active', true)
-            ->orderByDesc('priority')
             ->with('category')
+            ->orderByDesc('priority')
+            ->orderByDesc('weight')
+            ->orderBy('title')
             ->get();
 
-        // Per evitare N query: calcoliamo tutte le period_key e facciamo 1 query completions
+        // Calcolo period_key per ogni chore
         $now = now();
-        $periodByChoreId = [];   // [choreId => ['key' => ..., 'due_at' => Carbon]]
-        $keysByChoreId = [];     // [choreId => key]
-        $keys = [];              // lista key
+        $periodByChoreId = []; // [choreId => ['key' => ..., 'due_at' => Carbon]]
+        $keys = [];
 
         foreach ($chores as $chore) {
             [$key, $start, $endExclusive] = $this->periodRange($chore->frequency, $now);
+
             $periodByChoreId[$chore->id] = [
                 'key' => $key,
-                'due_at' => $endExclusive, // in UI puoi mostrare "entro domenica" per weekly
+                'due_at' => $endExclusive,
             ];
-            $keysByChoreId[$chore->id] = $key;
+
             $keys[$key] = true;
         }
 
         $uniqueKeys = array_keys($keys);
 
-        $completions = ChoreCompletion::query()
+        // Completions del periodo corrente (per capire cosa è già fatto)
+        $periodCompletions = ChoreCompletion::query()
             ->where('family_id', $family->id)
             ->whereIn('chore_id', $chores->pluck('id'))
             ->whereIn('period_key', $uniqueKeys)
             ->get()
             ->keyBy(fn($c) => $c->chore_id . '|' . $c->period_key);
 
-        $dto = $chores->map(function (Chore $chore) use ($periodByChoreId, $completions) {
+        // ✅ 1) SOLO PENDING: escludo quelli che hanno completion per la period_key corrente
+        $prending = [];
+
+        foreach ($chores as $chore) {
             $meta = $periodByChoreId[$chore->id];
             $key = $meta['key'];
 
-            $completion = $completions->get($chore->id . '|' . $key);
+            $completionKey = $chore->id . '|' . $key;
+            if ($periodCompletions->has($completionKey)) {
+                continue; // già completato in questo periodo => NON lo mostro tra gli attivi
+            }
 
-            return [
+            $prending[] = [
                 'id' => $chore->id,
                 'title' => $chore->title,
                 'frequency' => $chore->frequency,
@@ -96,81 +103,68 @@ class ChoreController extends Controller
                 'is_active' => (bool) $chore->is_active,
                 'category' => $chore->category,
 
-                // ✅ stato periodo corrente
+                // stato periodo corrente
                 'period_key' => $key,
-                'due_at' => $meta['due_at']->toIso8601String(), // end-exclusive
-                'is_completed' => (bool) $completion,
-                'completed_at' => $completion?->completed_at?->toIso8601String(),
-                'completed_by_user_id' => $completion?->completed_by_user_id,
+                'due_at' => $meta['due_at']->toIso8601String(),
+                'is_completed' => false,
+                'completed_at' => null,
+                'completed_by' => null,
             ];
-        });
+        }
+
+        // ✅ 2) ULTIMI 3 COMPLETATI (storico breve)
+        $completions = ChoreCompletion::query()
+            ->where('family_id', $family->id)
+            ->with(['chore.category'])
+            ->orderByDesc('completed_at')
+            ->limit(3)
+            ->get()
+            ->map(fn($c) => [
+                'id' => $c->id,
+                'chore_id' => $c->chore_id,
+                'family_id' => $c->family_id,
+                'completed_by' => $c->completed_by,
+                'period_key' => $c->period_key,
+                'completed_at' => optional($c->completed_at)->toDateString(), // o toIso8601String()
+                'chore' => $c->chore ? [
+                    'id' => $c->chore->id,
+                    'family_id' => $c->chore->family_id,
+                    'assigned_to_user_id' => $c->chore->assigned_to_user_id,
+                    'category_id' => $c->chore->category_id,
+                    'title' => $c->chore->title,
+                    'description' => $c->chore->description,
+                    'frequency' => $c->chore->frequency,
+                    'weight' => $c->chore->weight,
+                    'priority' => $c->chore->priority,
+                    'is_active' => (int) $c->chore->is_active,
+                    'due_at' => optional($c->chore->due_at)?->toIso8601String(),
+                    'created_at' => optional($c->chore->created_at)?->toIso8601String(),
+                    'updated_at' => optional($c->chore->updated_at)?->toIso8601String(),
+                    'category' => $c->chore->category,
+                ] : null,
+            ])
+            ->values();
 
         return response()->json([
             'success' => 'ok',
-            'chores' => $dto,
+            'pending' => $prending,
+            'completions' => $completions,
         ]);
     }
 
-    public function complete(Request $request, Chore $chore)
+    public function completed(Request $request)
     {
         $family = $this->currentFamilyOrFail($request);
 
-        if ((int)$chore->family_id !== (int)$family->id || !$chore->is_active) {
-            return response()->json(['message' => 'Not found.'], 404);
-        }
-
-        /** @var \App\Models\User $user */
-        $user = $request->user();
-
-        [$periodKey] = $this->periodRange($chore->frequency, now());
-
-        $completion = DB::transaction(function () use ($family, $chore, $periodKey, $user) {
-            return ChoreCompletion::updateOrCreate(
-                [
-                    'chore_id' => $chore->id,
-                    'period_key' => $periodKey,
-                ],
-                [
-                    'family_id' => $family->id,
-                    'completed_by_user_id' => $user->id,
-                    'completed_at' => now(),
-                ]
-            );
-        });
+        $completions = ChoreCompletion::query()
+            ->orderByDesc('completed_at')
+            ->where('family_id', $family->id)
+            ->with('chore.category')
+            ->get();
 
         return response()->json([
             'success' => 'ok',
-            'completion' => [
-                'chore_id' => $completion->chore_id,
-                'period_key' => $completion->period_key,
-                'completed_at' => $completion->completed_at?->toIso8601String(),
-                'completed_by_user_id' => $completion->completed_by_user_id,
-            ],
-        ]);
-    }
-
-    public function uncomplete(Request $request, Chore $chore)
-    {
-        $family = $this->currentFamilyOrFail($request);
-
-        if ((int)$chore->family_id !== (int)$family->id || !$chore->is_active) {
-            return response()->json(['message' => 'Not found.'], 404);
-        }
-
-        [$periodKey] = $this->periodRange($chore->frequency, now());
-
-        DB::transaction(function () use ($family, $chore, $periodKey) {
-            ChoreCompletion::query()
-                ->where('family_id', $family->id)
-                ->where('chore_id', $chore->id)
-                ->where('period_key', $periodKey)
-                ->delete();
-        });
-
-        return response()->json([
-            'success' => 'ok',
-            'completion' => null,
-            'period_key' => $periodKey,
+            'completions' => $completions,
         ]);
     }
 
@@ -218,7 +212,7 @@ class ChoreController extends Controller
                     ],
                     [
                         'family_id' => $family->id,
-                        'completed_by_user_id' => $user->id,
+                        'completed_by' => $user->id,
                         'completed_at' => now(),
                     ]
                 );
@@ -243,19 +237,79 @@ class ChoreController extends Controller
         }
 
         $data = $request->validate([
-            'title' => ['sometimes', 'string', 'max:120'],
-            'frequency' => ['sometimes', 'in:daily,weekly,monthly,semiannual'],
-            'category' => ['sometimes', 'string', 'max:60'],
-            'weight' => ['sometimes', 'integer', 'min:1', 'max:5'],
-            'priority' => ['sometimes', 'integer', 'min:1', 'max:5'],
-            'is_active' => ['sometimes', 'boolean'],
+            'title' => ['required', 'string', 'max:120'],
+            'frequency' => ['required', 'in:daily,weekly,monthly,semiannual'],
+            'category_id' => ['required', 'integer'],
+            'weight' => ['required', 'integer', 'min:1', 'max:5'],
+            'priority' => ['required', 'integer', 'min:1', 'max:5'],
+            'is_active' => ['required', 'boolean'],
         ]);
 
         $chore->fill($data)->save();
 
+        $chore->load('category');
+
         return response()->json([
             'success' => 'ok',
             'chore' => $chore,
+        ]);
+    }
+
+    public function complete(Request $request, Chore $chore)
+    {
+        $user = $request->user();
+        $family = $this->currentFamilyOrFail($request);
+
+        if ((int)$chore->family_id !== (int)$family->id || !$chore->is_active) {
+            return response()->json(['message' => 'Not found.'], 404);
+        }
+
+        [$periodKey] = $this->periodRange($chore->frequency, now());
+
+        $completion = DB::transaction(function () use ($family, $chore, $periodKey, $user) {
+            return ChoreCompletion::updateOrCreate(
+                [
+                    'chore_id' => $chore->id,
+                    'period_key' => $periodKey,
+                    'family_id' => $family->id,
+                ],
+                [
+                    'completed_by' => $user->id,
+                    'completed_at' => now(),
+                ]
+            );
+        });
+
+        $completion->load('chore');
+
+        return response()->json([
+            'success' => 'ok',
+            'completion' => $completion,
+        ]);
+    }
+
+    public function uncomplete(Request $request, Chore $chore)
+    {
+        $family = $this->currentFamilyOrFail($request);
+
+        if ((int)$chore->family_id !== (int)$family->id || !$chore->is_active) {
+            return response()->json(['message' => 'Not found.'], 404);
+        }
+
+        [$periodKey] = $this->periodRange($chore->frequency, now());
+
+        DB::transaction(function () use ($family, $chore, $periodKey) {
+            ChoreCompletion::query()
+                ->where('family_id', $family->id)
+                ->where('chore_id', $chore->id)
+                ->where('period_key', $periodKey)
+                ->delete();
+        });
+
+        return response()->json([
+            'success' => 'ok',
+            'completion' => null,
+            'period_key' => $periodKey,
         ]);
     }
 

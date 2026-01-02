@@ -12,7 +12,17 @@ class ChoreCompletion extends Model
         'family_id',
         'chore_id',
         'period_key',
-        'completed_by_user_id',
+        'completed_by',
         'completed_at',
     ];
+
+    protected $casts = [
+        'completed_at' => 'datetime:Y-m-d'
+    ];
+
+
+    public function chore()
+    {
+        return $this->belongsTo(Chore::class, 'chore_id', 'id')->orderBy('created_at', 'desc');
+    }
 }
