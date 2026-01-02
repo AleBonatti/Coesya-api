@@ -16,4 +16,10 @@ class Family extends Model
     {
         return $this->hasMany(Chore::class)->orderBy('created_at', 'desc');
     }
+
+
+    public function users()
+    {
+        return $this->hasMany(User::class)->orderBy('lastname');
+    }
 }
