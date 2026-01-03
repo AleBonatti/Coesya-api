@@ -13,11 +13,23 @@ class FamilyController extends Controller
 {
     public function index(Request $request)
     {
-        sleep(1);
-
         $items = $request->user()->families;
 
         return response()->json(['success' => 'ok', 'items' => $items]);
+    }
+
+
+    public function members(Request $request, $id)
+    {
+        $user = $request->user();
+        $family = Family::with('users')->findOrFail($id);
+
+        // verifico che l'utente appartenga effettivamente alla famiglia
+        if (!$user->families->contains('id', $id)) {
+            return response()->json(['success' => 'ko']);
+        }
+
+        return response()->json(['success' => 'ok', 'members' => $family->users]);
     }
 
 
