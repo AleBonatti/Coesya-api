@@ -20,6 +20,6 @@ class Family extends Model
 
     public function users()
     {
-        return $this->hasMany(User::class)->orderBy('lastname');
+        return $this->belongsToMany(User::class, 'users_families', 'family_id', 'user_id')->orderBy('lastname');
     }
 }

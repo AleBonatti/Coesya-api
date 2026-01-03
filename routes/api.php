@@ -17,6 +17,7 @@ Route::middleware('auth:sanctum')->group(function () {
         }
         return response()->json($user);
     });
+    Route::get('family/{id}/members', [FamilyController::class, 'members']);
     Route::resource('family', FamilyController::class);
     Route::post('family/{id}/uploadPhoto', [FamilyController::class, 'upload']);
 
