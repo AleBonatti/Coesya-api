@@ -14,7 +14,8 @@ return new class extends Migration
         Schema::create('families', function (Blueprint $table) {
             $table->id();
             $table->string('name', 100);
-            $table->string('code', 100);
+            $table->string('slug', 100);
+            $table->char('code', 5);
             $table->string('profile_photo_path')->nullable();
 
             $table->timestamps();
