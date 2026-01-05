@@ -43,14 +43,19 @@ class FamilyController extends Controller
 
         $family = new Family();
         $family->name = $request->name;
-        $family->code = Str::slug($family->name);
+        $family->slug = Str::slug($family->name);
+        $family->code = Str::random(5);
         $family->save();
 
         $current = $user->families->count() ? 0 : 1;
 
         $user->families()->attach($family->id, ['current' => $current]);
 
-        return response()->json(['success' => 'ok', 'family' => $family]);
+        if (!$user->has_completed_wizard) {
+            $user->has_completed_wizard = 1;
+        }
+
+        return response()->json(['success' => 'ok', 'family' => $family, 'user' => $user]);
     }
 
 
@@ -62,7 +67,7 @@ class FamilyController extends Controller
 
         $family = Family::findOrFail($id);
         $family->name = $request->name;
-        $family->code = Str::slug($family->name);
+        $family->slug = Str::slug($family->name);
         $family->save();
 
         return response()->json(['success' => 'ok', 'family' => $family]);
@@ -117,5 +122,29 @@ class FamilyController extends Controller
             'success' => 'ok',
             'family' => $family,
         ]);
+    }
+
+    public function code(Request $request, $id)
+    {
+        // TODO
+        return response()->json(['success' => 'ok']);
+    }
+
+
+    public function join(Request $request, $id)
+    {
+        // TODO
+        $user = $request->user;
+
+        return response()->json(['success' => 'ok', 'user' => $user]);
+    }
+
+
+    public function leave(Request $request, $id)
+    {
+        // TODO
+        $user = $request->user;
+
+        return response()->json(['success' => 'ok', 'user' => $user]);
     }
 }
