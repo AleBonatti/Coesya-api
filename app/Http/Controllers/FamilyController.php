@@ -160,10 +160,14 @@ class FamilyController extends Controller
 
     public function leave(Request $request, $family_id, $user_id)
     {
-        // TODO
         $user = $request->user();
 
-        //TODO check vari ed eventuali
+        // l'ugtente non può rimuovere sè stesso dalla famiglia
+        if ($user->id === $user_id) {
+            return response()->json(['success' => 'ko', 'nessage' => 'Non puoi rimuovere te stesso!'], 409);
+        }
+
+        // TODO rimozione vera e propria
 
         return response()->json(['success' => 'ok']);
     }
