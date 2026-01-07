@@ -19,10 +19,10 @@ Route::middleware('auth:sanctum')->group(function () {
     });
     Route::get('family/{id}/members', [FamilyController::class, 'members']);
     Route::resource('family', FamilyController::class);
+    Route::post('family/join', [FamilyController::class, 'join']);
     Route::post('family/{id}/uploadPhoto', [FamilyController::class, 'upload']);
     Route::post('family/{id}/code', [FamilyController::class, 'code']);
     Route::post('family/{id}/leave', [FamilyController::class, 'leave']);
-    Route::post('family/{id}/join', [FamilyController::class, 'join']);
 
     Route::post('chores/{chore}/complete', [ChoreController::class, 'complete']);
     Route::post('chores/{chore}/uncomplete', [ChoreController::class, 'uncomplete']);

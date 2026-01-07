@@ -44,7 +44,7 @@ class FamilyController extends Controller
         $family = new Family();
         $family->name = $request->name;
         $family->slug = Str::slug($family->name);
-        $family->code = Str::random(5);
+        $family->code = Str::substr($family->id . Str::random(5), 5); // il codice è sempre l'id + caratteri random per un massimo di 5 caratteri 
         $family->save();
 
         $current = $user->families->count() ? 0 : 1;
@@ -131,19 +131,37 @@ class FamilyController extends Controller
     }
 
 
-    public function join(Request $request, $id)
+    public function join(Request $request)
     {
-        // TODO
-        $user = $request->user;
+        $user = $request->user();
 
-        return response()->json(['success' => 'ok', 'user' => $user]);
+        // codice mancante
+        if ($request->missing('code')) {
+            return response()->json(['success' => 'ko', 'nessage' => 'Codice mancante nella richiesta'], 422);
+        }
+
+        $family = Family::where('code', $request->code)->firstOrFail();
+
+        // TODO 
+        // famiglia già associata (non dovrebbe mai verificarsi) 409
+        //if($user->families)
+
+        $user->families()->attach($family->id, ['current' => 1]);
+
+        // se è la prima famiglia, imposto che l'utente è a posto col wizard
+        if (!$user->has_completed_wizard) {
+            $user->has_completed_wizard = 1;
+            $user->save();
+        }
+
+        return response()->json(['success' => 'ok', 'family' => $family]);
     }
 
 
-    public function leave(Request $request, $id)
+    public function leave(Request $request)
     {
         // TODO
-        $user = $request->user;
+        $user = $request->user();
 
         return response()->json(['success' => 'ok', 'user' => $user]);
     }
