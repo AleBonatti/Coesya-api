@@ -22,7 +22,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('family/join', [FamilyController::class, 'join']);
     Route::post('family/{id}/uploadPhoto', [FamilyController::class, 'upload']);
     Route::post('family/{id}/code', [FamilyController::class, 'code']);
-    Route::post('family/{id}/leave', [FamilyController::class, 'leave']);
+    //Route::post('family/{id}/leave', [FamilyController::class, 'leave']);
+    Route::delete('family/{family_id}/member/{user_id}', [FamilyController::class, 'leave']);
 
     Route::post('chores/{chore}/complete', [ChoreController::class, 'complete']);
     Route::post('chores/{chore}/uncomplete', [ChoreController::class, 'uncomplete']);

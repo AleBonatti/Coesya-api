@@ -158,11 +158,13 @@ class FamilyController extends Controller
     }
 
 
-    public function leave(Request $request)
+    public function leave(Request $request, $family_id, $user_id)
     {
         // TODO
         $user = $request->user();
 
-        return response()->json(['success' => 'ok', 'user' => $user]);
+        //TODO check vari ed eventuali
+
+        return response()->json(['success' => 'ok']);
     }
 }
